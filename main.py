@@ -6,28 +6,41 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
+import os
 
+# Configuración de página
 st.set_page_config(page_title="SGI - LIMAYSER", layout="centered")
 
 # --- LECTURA DE NÓMINA ---
+def obtener_ruta_nomina():
+    # Buscamos el archivo en la carpeta principal
+    for root, dirs, files in os.walk("."):
+        if "nomina.xlsx" in files:
+            return os.path.join(root, "nomina.xlsx")
+    return None
+
 def cargar_nomina():
-    try:
-        # Intentamos leer el Excel
-        df = pd.read_excel("nomina.xlsx", engine='openpyxl')
-        return df.iloc[:, 0].dropna().astype(str).tolist()
-    except Exception as e:
-        return []
+    ruta = obtener_ruta_nomina()
+    if ruta:
+        try:
+            df = pd.read_excel(ruta, engine='openpyxl')
+            return df.iloc[:, 0].dropna().astype(str).tolist()
+        except Exception as e:
+            st.sidebar.error(f"Error al leer: {e}")
+            return []
+    return []
 
 lista_operarios = cargar_nomina()
 
 if 'enviado' not in st.session_state:
     st.session_state.enviado = False
 
-# --- GENERADOR DE PDF (Formato PG 06 R 1) ---
+# --- GENERADOR DE PDF (Formato PG 06 R 1 Rev. 2) ---
 def crear_pdf(datos):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
+    # Encabezado
     pdf.cell(190, 10, "PARTE DIARIO de TRABAJO", border=1, ln=1, align='C')
     pdf.set_font("Arial", "B", 10)
     pdf.cell(95, 8, "LIMAYSER s.r.l", border=1, align='L')
@@ -35,25 +48,24 @@ def crear_pdf(datos):
     
     pdf.set_font("Arial", "", 9)
     pdf.ln(4)
-    # Fila 1: Fecha, Unidad, Presupuesto
+    # Datos de Obra
     pdf.cell(63, 8, f"FECHA: {datos['fecha']}", border=1)
     pdf.cell(63, 8, f"UNIDAD N°: {datos['unidad']}", border=1)
-    pdf.cell(64, 8, f"N° PRESUPUESTO: {datos['presupuesto']}", border=1, ln=1)
+    pdf.cell(64, 8, f"PRESUPUESTO N°: {datos['presupuesto']}", border=1, ln=1)
     
-    # Fila 2: Cliente y Tipo
-    pdf.cell(126, 8, f"CLIENTE / UBICACIÓN: {datos['cliente']}", border=1)
-    pdf.cell(64, 8, f"TIPO: {datos['tipo']}", border=1, ln=1)
+    pdf.cell(190, 8, f"CLIENTE/UBICACIÓN/CONTACTO: {datos['cliente']}", border=1, ln=1)
+    pdf.cell(190, 8, f"TIPO DE TRABAJO: {datos['tipo']}", border=1, ln=1)
     
-    # Fila 3: Horarios
+    # Horarios
     pdf.cell(63, 8, f"HS. INICIO: {datos['h_in']}", border=1)
     pdf.cell(63, 8, f"HS. VIAJE: {datos['h_viaje']}", border=1)
     pdf.cell(64, 8, f"HS. FINAL: {datos['h_fin']}", border=1, ln=1)
 
     pdf.ln(4)
     pdf.set_font("Arial", "B", 9)
-    pdf.cell(190, 8, "DETALLE DE TAREAS Y OPERARIOS PARTICIPANTES:", border=1, ln=1)
+    pdf.cell(190, 8, "DETALLE: Tareas realizadas y operarios participantes", border=1, ln=1)
     pdf.set_font("Arial", "", 9)
-    pdf.multi_cell(190, 8, f"PERSONAL: {datos['personal']}\n\nTAREAS: {datos['tareas']}", border=1)
+    pdf.multi_cell(190, 8, f"OPERARIOS: {datos['personal']}\n\nTAREAS: {datos['tareas']}", border=1)
     
     pdf.ln(4)
     pdf.cell(190, 8, "MATERIALES UTILIZADOS de STOCK:", border=1, ln=1)
@@ -91,39 +103,35 @@ def enviar_email(pdf_cont, nombre_archivo):
 st.title("🏗️ Registro Digital PG 06 R 1")
 
 if st.session_state.enviado:
-    st.success("✅ Parte enviado correctamente. Revisa tu mail.")
-    if st.button("Cargar otro Parte Diario"):
+    st.success("✅ ¡Parte enviado con éxito!")
+    if st.button("Cargar nuevo Parte Diario"):
         st.session_state.enviado = False
         st.rerun()
 else:
-    # Aviso si no se encuentra la nómina
     if not lista_operarios:
-        st.warning("⚠️ No se detectó 'nomina.xlsx'. Se usarán nombres genéricos.")
-        lista_operarios = ["Operario 1", "Operario 2", "Operario 3"]
+        st.warning("⚠️ No se detectó 'nomina.xlsx'. Revisa GitHub.")
+        lista_operarios = ["Cargar nomina.xlsx para ver personal"]
 
     with st.form("form_oficial"):
         c1, c2, c3 = st.columns(3)
         with c1: f_fecha = st.date_input("FECHA")
         with c2: f_unidad = st.text_input("UNIDAD N°")
-        with c3: f_presupuesto = st.text_input("N° PRESUPUESTO")
+        with c3: f_presupuesto = st.text_input("PRESUPUESTO N°")
         
         f_cliente = st.text_input("CLIENTE / UBICACIÓN / CONTACTOS")
         f_tipo = st.multiselect("TIPO DE TRABAJO", ["Mantenimiento", "Jardinería", "Carpintería", "Obra civil", "Refrigeración", "Metálica", "General"])
         
         h1, h2, h3 = st.columns(3)
-        with h1: f_h_in = st.time_input("Hora Inicio")
+        with h1: f_h_in = st.time_input("Hs. Inicio")
         with h2: f_h_viaje = st.number_input("Hs. Viaje", min_value=0.0, step=0.5)
-        with h3: f_h_fin = st.time_input("Hora Final")
+        with h3: f_h_fin = st.time_input("Hs. Final")
         
         f_personal = st.multiselect("OPERARIOS PARTICIPANTES:", options=lista_operarios)
-        f_tareas = st.text_area("DETALLE TAREAS")
+        f_tareas = st.text_area("DETALLE TAREAS REALIZADAS")
         f_materiales = st.text_area("MATERIALES STOCK")
         f_obs = st.text_area("OBSERVACIONES (Remitos, inconvenientes, etc.)")
         
-        # EL BOTÓN DEBE ESTAR AQUÍ DENTRO
-        submit = st.form_submit_button("VALIDAR Y ENVIAR PARTE")
-        
-        if submit:
+        if st.form_submit_button("VALIDAR Y ENVIAR PARTE"):
             if f_unidad and f_cliente and f_personal:
                 datos = {
                     'fecha': f_fecha, 'unidad': f_unidad, 'presupuesto': f_presupuesto,
