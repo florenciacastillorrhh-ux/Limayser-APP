@@ -129,3 +129,29 @@ with st.form("form_pdf"):
         archivo_pdf = crear_pdf(datos)
         if enviar_email(archivo_pdf, f"Parte_{f_unidad}.pdf"):
             st.success("✅ PDF enviado correctamente a tu casilla.")
+def enviar_email(pdf_contenido, nombre_archivo):
+    try:
+        remitente = st.secrets["EMAIL_PRUEBA"]
+        password = st.secrets["EMAIL_PASS"]
+        
+        msg = MIMEMultipart()
+        msg['From'] = remitente
+        msg['To'] = remitente 
+        msg['Subject'] = f"Nuevo Parte Diario - {nombre_archivo}"
+
+        adjunto = MIMEBase('application', 'octet-stream')
+        adjunto.set_payload(pdf_contenido)
+        encoders.encode_base64(adjunto)
+        adjunto.add_header('Content-Disposition', f"attachment; filename={nombre_archivo}")
+        msg.attach(adjunto)
+
+        # Conexión explícita con puerto seguro
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(remitente, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        # Esto te mostrará el error real en la pantalla de la App si algo falla
+        st.error(f"Error detectado: {e}")
+        return False
