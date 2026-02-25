@@ -9,52 +9,51 @@ from datetime import datetime
 
 st.set_page_config(page_title="SGI - LIMAYSER", layout="centered")
 
-# --- CARGA DE NÓMINA ---
-@st.cache_data
-def obtener_operarios():
+# --- LECTURA DE NÓMINA ---
+def cargar_nomina():
     try:
-        # Intenta leer el archivo
+        # Forzamos el motor openpyxl para evitar errores de lectura
         df = pd.read_excel("nomina.xlsx", engine='openpyxl')
-        # Toma la primera columna, quita vacíos y convierte a lista
         return df.iloc[:, 0].dropna().astype(str).tolist()
-    except Exception as e:
-        # Si falla, muestra el error técnico para debuguear
-        st.sidebar.error(f"Error al leer nomina.xlsx: {e}")
-        return ["Error al cargar nómina"]
+    except:
+        return []
 
-lista_operarios = obtener_operarios()
+lista_operarios = cargar_nomina()
 
 if 'enviado' not in st.session_state:
     st.session_state.enviado = False
 
-# --- GENERADOR DE PDF (Formato PG 06 R 1) ---
+# --- GENERADOR DE PDF ---
 def crear_pdf(datos):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
+    # Encabezado
     pdf.cell(190, 10, "PARTE DIARIO de TRABAJO", border=1, ln=1, align='C')
     pdf.set_font("Arial", "B", 10)
     pdf.cell(95, 8, "LIMAYSER s.r.l", border=1, align='L')
-    pdf.cell(95, 8, f"COD: {datos['cod']} - REV: {datos['rev']}", border=1, ln=1, align='R')
+    pdf.cell(95, 8, "COD: PG 06 R 1 - REV: 2", border=1, ln=1, align='R')
     
     pdf.set_font("Arial", "", 9)
     pdf.ln(4)
+    # Datos de Obra
     pdf.cell(63, 8, f"FECHA: {datos['fecha']}", border=1)
-    pdf.cell(63, 8, f"UNIDAD N°: {datos['unidad']}", border=1)
-    pdf.cell(64, 8, f"PRESUPUESTO N°: {datos['presupuesto']}", border=1, ln=1)
+    pdf.cell(63, 8, f"UNIDAD: {datos['unidad']}", border=1)
+    pdf.cell(64, 8, f"PRESUPUESTO: {datos['presupuesto']}", border=1, ln=1)
     
     pdf.cell(190, 8, f"CLIENTE / UBICACIÓN: {datos['cliente']}", border=1, ln=1)
     pdf.cell(190, 8, f"TIPO DE TRABAJO: {datos['tipo']}", border=1, ln=1)
     
+    # Horarios
     pdf.cell(63, 8, f"HS. INICIO: {datos['h_in']}", border=1)
     pdf.cell(63, 8, f"HS. VIAJE: {datos['h_viaje']}", border=1)
     pdf.cell(64, 8, f"HS. FINAL: {datos['h_fin']}", border=1, ln=1)
 
     pdf.ln(4)
-    pdf.multi_cell(190, 8, f"OPERARIOS PARTICIPANTES: {datos['personal']}", border=1)
-    pdf.multi_cell(190, 8, f"DETALLE TAREAS: {datos['tareas']}", border=1)
-    pdf.multi_cell(190, 8, f"MATERIALES STOCK: {datos['materiales']}", border=1)
-    pdf.multi_cell(190, 8, f"OBSERVACIONES: {datos['obs']}", border=1)
+    pdf.multi_cell(190, 8, f"OPERARIOS PARTICIPANTES:\n{datos['personal']}", border=1)
+    pdf.multi_cell(190, 8, f"DETALLE TAREAS:\n{datos['tareas']}", border=1)
+    pdf.multi_cell(190, 8, f"MATERIALES UTILIZADOS:\n{datos['materiales']}", border=1)
+    pdf.multi_cell(190, 8, f"OBSERVACIONES:\n{datos['obs']}", border=1)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -77,7 +76,7 @@ def enviar_email(pdf_cont, nombre_archivo):
         server.quit()
         return True
     except Exception as e:
-        st.error(f"Error de mail: {e}")
+        st.error(f"Error de envío: {e}")
         return False
 
 # --- INTERFAZ ---
@@ -89,39 +88,20 @@ if st.session_state.enviado:
         st.session_state.enviado = False
         st.rerun()
 else:
+    # Si la lista está vacía, mostramos una advertencia
+    if not lista_operarios:
+        st.warning("⚠️ No se cargó la nómina. Verifica que 'nomina.xlsx' esté en GitHub.")
+    
     with st.form("form_limayser"):
         c1, c2, c3 = st.columns(3)
-        with c1: f_fecha = st.date_input("FECHA") [cite: 9]
-        with c2: f_unidad = st.text_input("UNIDAD N°") [cite: 18]
-        with c3: f_presupuesto = st.text_input("PRESUPUESTO N°") [cite: 15]
+        with c1: f_fecha = st.date_input("FECHA")
+        with c2: f_unidad = st.text_input("UNIDAD (N°)")
+        with c3: f_presupuesto = st.text_input("PRESUPUESTO (N°)")
         
-        f_cliente = st.text_input("CLIENTE / UBICACIÓN / CONTACTO") [cite: 10]
-        f_tipo = st.multiselect("TIPO DE TRABAJO", ["Mantenimiento", "Jardinería", "Carpintería", "Obra civil", "Refrigeración", "Metálica", "General"]) [cite: 8, 10, 19, 21, 23, 24, 25]
+        f_cliente = st.text_input("CLIENTE / UBICACIÓN / CONTACTO")
+        f_tipo = st.multiselect("TIPO DE TRABAJO", ["Mantenimiento", "Jardinería", "Carpintería", "Obra civil", "Refrigeración", "Metálica", "General"])
         
         h1, h2, h3 = st.columns(3)
-        with h1: f_h_in = st.time_input("Inicio") [cite: 15]
-        with h2: f_h_viaje = st.number_input("Hs. Viaje", min_value=0.0, step=0.5) [cite: 16]
-        with h3: f_h_fin = st.time_input("Final") [cite: 16]
-        
-        f_personal = st.multiselect("OPERARIOS PARTICIPANTES:", options=lista_operarios) [cite: 27]
-        f_tareas = st.text_area("DETALLE TAREAS") [cite: 27]
-        f_materiales = st.text_area("MATERIALES STOCK") [cite: 28]
-        f_obs = st.text_area("OBSERVACIONES / REMITOS") [cite: 29]
-        
-        submit = st.form_submit_button("VALIDAR Y ENVIAR")
-        
-        if submit:
-            if f_unidad and f_cliente and f_personal:
-                datos = {
-                    'fecha': f_fecha, 'unidad': f_unidad, 'presupuesto': f_presupuesto,
-                    'cliente': f_cliente, 'tipo': ", ".join(f_tipo), 'cod': "PG 06 R 1", 'rev': "2",
-                    'h_in': f_h_in, 'h_viaje': f_h_viaje, 'h_fin': f_h_fin,
-                    'personal': ", ".join(f_personal), 'tareas': f_tareas,
-                    'materiales': f_materiales, 'obs': f_obs
-                }
-                archivo_pdf = crear_pdf(datos)
-                if enviar_email(archivo_pdf, f"Parte_{f_unidad}.pdf"):
-                    st.session_state.enviado = True
-                    st.rerun()
-            else:
-                st.warning("⚠️ Unidad, Cliente y Operarios son obligatorios.")
+        with h1: f_h_in = st.time_input("Inicio")
+        with h2: f_h_viaje = st.number_input("Hs. Viaje", min_value=0.0)
+        with h3: f_h_fin = st.time_input
