@@ -9,59 +9,52 @@ from datetime import datetime
 
 st.set_page_config(page_title="SGI - LIMAYSER", layout="centered")
 
-# 1. Carga de Nómina
-try:
-    df_nomina = pd.read_excel("nomina.xlsx")
-    lista_operarios = df_nomina.iloc[:, 0].dropna().tolist()
-except:
-    lista_operarios = ["Operario 1", "Operario 2", "Operario 3"]
+# --- CARGA DE NÓMINA ---
+@st.cache_data
+def obtener_operarios():
+    try:
+        # Intenta leer el archivo
+        df = pd.read_excel("nomina.xlsx", engine='openpyxl')
+        # Toma la primera columna, quita vacíos y convierte a lista
+        return df.iloc[:, 0].dropna().astype(str).tolist()
+    except Exception as e:
+        # Si falla, muestra el error técnico para debuguear
+        st.sidebar.error(f"Error al leer nomina.xlsx: {e}")
+        return ["Error al cargar nómina"]
+
+lista_operarios = obtener_operarios()
 
 if 'enviado' not in st.session_state:
     st.session_state.enviado = False
 
+# --- GENERADOR DE PDF (Formato PG 06 R 1) ---
 def crear_pdf(datos):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    # Encabezado oficial PG 06 R 1 [cite: 2, 5, 6]
     pdf.cell(190, 10, "PARTE DIARIO de TRABAJO", border=1, ln=1, align='C')
     pdf.set_font("Arial", "B", 10)
     pdf.cell(95, 8, "LIMAYSER s.r.l", border=1, align='L')
-    pdf.cell(95, 8, "COD: PG 06 R 1 - REV: 2", border=1, ln=1, align='R')
+    pdf.cell(95, 8, f"COD: {datos['cod']} - REV: {datos['rev']}", border=1, ln=1, align='R')
     
     pdf.set_font("Arial", "", 9)
     pdf.ln(4)
-    # Fila: Fecha, Unidad y Presupuesto [cite: 12, 15, 18]
     pdf.cell(63, 8, f"FECHA: {datos['fecha']}", border=1)
     pdf.cell(63, 8, f"UNIDAD N°: {datos['unidad']}", border=1)
     pdf.cell(64, 8, f"PRESUPUESTO N°: {datos['presupuesto']}", border=1, ln=1)
     
-    # Fila: Cliente y Tipo de Trabajo [cite: 8, 10]
-    pdf.cell(126, 8, f"CLIENTE / UBICACIÓN: {datos['cliente']}", border=1)
-    pdf.cell(64, 8, f"TIPO: {datos['tipo']}", border=1, ln=1)
+    pdf.cell(190, 8, f"CLIENTE / UBICACIÓN: {datos['cliente']}", border=1, ln=1)
+    pdf.cell(190, 8, f"TIPO DE TRABAJO: {datos['tipo']}", border=1, ln=1)
     
-    # Fila: Horarios [cite: 16]
     pdf.cell(63, 8, f"HS. INICIO: {datos['h_in']}", border=1)
     pdf.cell(63, 8, f"HS. VIAJE: {datos['h_viaje']}", border=1)
     pdf.cell(64, 8, f"HS. FINAL: {datos['h_fin']}", border=1, ln=1)
 
     pdf.ln(4)
-    pdf.set_font("Arial", "B", 9)
-    pdf.cell(190, 8, "DETALLE: Tareas y Operarios participantes", border=1, ln=1)
-    pdf.set_font("Arial", "", 9)
-    pdf.multi_cell(190, 8, f"PERSONAL: {datos['personal']}\nTAREAS: {datos['tareas']}", border=1)
-    
-    pdf.ln(4)
-    pdf.set_font("Arial", "B", 9)
-    pdf.cell(190, 8, "MATERIALES UTILIZADOS de STOCK", border=1, ln=1)
-    pdf.set_font("Arial", "", 9)
-    pdf.multi_cell(190, 8, datos['materiales'], border=1)
-    
-    pdf.ln(4)
-    pdf.set_font("Arial", "B", 9)
-    pdf.cell(190, 8, "OBSERVACIONES - COMENTARIOS", border=1, ln=1)
-    pdf.set_font("Arial", "", 9)
-    pdf.multi_cell(190, 8, datos['obs'], border=1)
+    pdf.multi_cell(190, 8, f"OPERARIOS PARTICIPANTES: {datos['personal']}", border=1)
+    pdf.multi_cell(190, 8, f"DETALLE TAREAS: {datos['tareas']}", border=1)
+    pdf.multi_cell(190, 8, f"MATERIALES STOCK: {datos['materiales']}", border=1)
+    pdf.multi_cell(190, 8, f"OBSERVACIONES: {datos['obs']}", border=1)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -72,7 +65,7 @@ def enviar_email(pdf_cont, nombre_archivo):
         msg = MIMEMultipart()
         msg['From'] = remitente
         msg['To'] = remitente
-        msg['Subject'] = f"SGI LIMAYSER - Nuevo Parte: {nombre_archivo}"
+        msg['Subject'] = f"SGI LIMAYSER - {nombre_archivo}"
         adj = MIMEBase('application', 'octet-stream')
         adj.set_payload(pdf_cont)
         encoders.encode_base64(adj)
@@ -84,44 +77,44 @@ def enviar_email(pdf_cont, nombre_archivo):
         server.quit()
         return True
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error de mail: {e}")
         return False
 
 # --- INTERFAZ ---
 st.title("🏗️ Registro Digital PG 06 R 1")
 
 if st.session_state.enviado:
-    st.success("✅ Parte enviado con éxito.")
+    st.success("✅ Parte enviado correctamente.")
     if st.button("Cargar otro"):
         st.session_state.enviado = False
         st.rerun()
 else:
     with st.form("form_limayser"):
         c1, c2, c3 = st.columns(3)
-        with c1: f_fecha = st.date_input("FECHA")
-        with c2: f_unidad = st.text_input("UNIDAD N°") # [cite: 18]
-        with c3: f_presupuesto = st.text_input("PRESUPUESTO N°") # [cite: 15]
+        with c1: f_fecha = st.date_input("FECHA") [cite: 9]
+        with c2: f_unidad = st.text_input("UNIDAD N°") [cite: 18]
+        with c3: f_presupuesto = st.text_input("PRESUPUESTO N°") [cite: 15]
         
-        f_cliente = st.text_input("CLIENTE / UBICACIÓN / CONTACTOS") # [cite: 10]
-        f_tipo = st.multiselect("TIPO DE TRABAJO", ["Mantenimiento", "Jardinería", "Carpintería", "Obra civil", "Refrigeración", "Metálica", "General"]) # [cite: 8, 10]
+        f_cliente = st.text_input("CLIENTE / UBICACIÓN / CONTACTO") [cite: 10]
+        f_tipo = st.multiselect("TIPO DE TRABAJO", ["Mantenimiento", "Jardinería", "Carpintería", "Obra civil", "Refrigeración", "Metálica", "General"]) [cite: 8, 10, 19, 21, 23, 24, 25]
         
         h1, h2, h3 = st.columns(3)
-        with h1: f_h_in = st.time_input("Inicio") # [cite: 16]
-        with h2: f_h_viaje = st.number_input("Hs. Viaje", min_value=0.0, step=0.5) # [cite: 16]
-        with h3: f_h_fin = st.time_input("Final") # [cite: 16]
+        with h1: f_h_in = st.time_input("Inicio") [cite: 15]
+        with h2: f_h_viaje = st.number_input("Hs. Viaje", min_value=0.0, step=0.5) [cite: 16]
+        with h3: f_h_fin = st.time_input("Final") [cite: 16]
         
-        f_personal = st.multiselect("OPERARIOS:", options=lista_operarios) # [cite: 27]
-        f_tareas = st.text_area("DETALLE TAREAS") # [cite: 26, 27]
-        f_materiales = st.text_area("MATERIALES STOCK") # [cite: 28]
-        f_obs = st.text_area("OBSERVACIONES") # [cite: 29]
+        f_personal = st.multiselect("OPERARIOS PARTICIPANTES:", options=lista_operarios) [cite: 27]
+        f_tareas = st.text_area("DETALLE TAREAS") [cite: 27]
+        f_materiales = st.text_area("MATERIALES STOCK") [cite: 28]
+        f_obs = st.text_area("OBSERVACIONES / REMITOS") [cite: 29]
         
-        submit = st.form_submit_button("VALIDAR Y ENVIAR") # El botón que faltaba
+        submit = st.form_submit_button("VALIDAR Y ENVIAR")
         
         if submit:
             if f_unidad and f_cliente and f_personal:
                 datos = {
                     'fecha': f_fecha, 'unidad': f_unidad, 'presupuesto': f_presupuesto,
-                    'cliente': f_cliente, 'tipo': ", ".join(f_tipo),
+                    'cliente': f_cliente, 'tipo': ", ".join(f_tipo), 'cod': "PG 06 R 1", 'rev': "2",
                     'h_in': f_h_in, 'h_viaje': f_h_viaje, 'h_fin': f_h_fin,
                     'personal': ", ".join(f_personal), 'tareas': f_tareas,
                     'materiales': f_materiales, 'obs': f_obs
@@ -131,4 +124,4 @@ else:
                     st.session_state.enviado = True
                     st.rerun()
             else:
-                st.warning("Completá Unidad, Cliente y Operarios.")
+                st.warning("⚠️ Unidad, Cliente y Operarios son obligatorios.")
