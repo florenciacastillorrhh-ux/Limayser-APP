@@ -146,3 +146,29 @@ else:
                     st.rerun()
             else:
                 st.error("⚠️ Unidad, Cliente y Operarios son obligatorios.")
+import streamlit as st
+import pandas as pd
+import os
+
+# --- CARGA DE NÓMINA REFORZADA ---
+def cargar_personal():
+    archivo_nombre = "nomina.xlsx"
+    # Verificamos si el archivo existe físicamente en el servidor
+    if os.path.exists(archivo_nombre):
+        try:
+            # Leemos sin usar caché para asegurar que tome los cambios
+            df = pd.read_excel(archivo_nombre, engine='openpyxl')
+            # Tomamos la primera columna y limpiamos nombres vacíos
+            nombres = df.iloc[:, 0].dropna().astype(str).tolist()
+            if len(nombres) > 0:
+                return nombres
+        except Exception as e:
+            st.sidebar.error(f"Error al abrir el archivo: {e}")
+    return []
+
+lista_operarios = cargar_personal()
+
+# Si la lista sigue vacía, mostramos el aviso
+if not lista_operarios:
+    st.warning("⚠️ No se detectaron nombres en 'nomina.xlsx'.")
+    lista_operarios = ["Cargar personal en nomina.xlsx"]
